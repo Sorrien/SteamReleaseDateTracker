@@ -1,3 +1,5 @@
+I wrote this because Steam does a terrible job of sorting my wishlist by release date. I want to know what upcoming games I can look forward to and when.
+
 When executed in a folder with "appids.txt" it will take each line of the file (each of which should be steam app id) and check for the release date of the games.
 
 It will print something like this to the console:
