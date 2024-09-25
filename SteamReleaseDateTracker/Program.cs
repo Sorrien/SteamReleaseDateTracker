@@ -1,31 +1,57 @@
 ﻿using SteamReleaseDateTracker;
 using SteamReleaseDateTracker.Models.Application;
+using SteamReleaseDateTracker.Models.Steam;
 
-var appIds = File.ReadLines("appids.txt");
+var appIds = await File.ReadAllLinesAsync("appids.txt");
 
 var httpclient = new HttpClient { BaseAddress = new Uri("https://store.steampowered.com/api/") };
-var apiTasks = appIds.Select(appId => SteamAPIHelper.GetAppDetails(appId, httpclient));
 
-var responses = await Task.WhenAll(apiTasks);
+var batches = appIds.Chunk(5);
 
-var games = responses.Select(response =>
+var responses = new List<(string, AppDetailsResponse)>();
+foreach (var batch in batches)
 {
-    var isDate = DateOnly.TryParse(response.Data.ReleaseDate.Date, out var date);
+    var tasks = batch.Select(appId => SteamAPIHelper.GetAppDetails(appId, httpclient));
+    responses.AddRange(await Task.WhenAll(tasks));
+    Thread.Sleep(1000);
+}
 
-    return new GameData
+var previousGameData = ApplicationHelper.GetMostRecentGameData();
+
+var games = responses.Select(data =>
+{
+    var (appId, response) = data;
+
+    if (response is null)
     {
-        AppId = response.Data.SteamAppId,
-        Name = response.Data.Name.Replace("\u2122", ""),
-        IsReleased = !response.Data.ReleaseDate.ComingSoon,
-        ReleaseDate = isDate ? date : null,
-        ReleaseDateString = isDate ? date.ToString() : response.Data.ReleaseDate.Date
-    };
-});
+        var previousData = previousGameData.FirstOrDefault(x => x.AppId.ToString() == appId);
+        if (previousData is null)
+        {
+            return null;
+        }
+        else
+        {
+            return previousData;
+        }
+    }
+    else
+    {
+        var isDate = DateOnly.TryParse(response.Data.ReleaseDate.Date, out var date);
+
+        return new GameData
+        {
+            AppId = response.Data.SteamAppId,
+            Name = response.Data.Name.Replace("\u2122", ""),
+            IsReleased = !response.Data.ReleaseDate.ComingSoon,
+            ReleaseDate = isDate ? date : null,
+            ReleaseDateString = isDate ? date.ToString() : response.Data.ReleaseDate.Date
+        };
+    }
+}).Where(game => game is not null);
 
 var fileSafeDateTimeNowString = DateTime.Now.ToString().Replace("/", "_").Replace(" ", "_").Replace(":", "_");
 ApplicationHelper.PrintGames(games);
 
-var previousGameData = ApplicationHelper.GetMostRecentGameData();
 ApplicationHelper.PrintNotifications(games, previousGameData);
 
 ApplicationHelper.SaveGameData(games);

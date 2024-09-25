@@ -5,20 +5,27 @@ namespace SteamReleaseDateTracker
 {
     public static class SteamAPIHelper
     {
-        public static async Task<AppDetailsResponse> GetAppDetails(string appId, HttpClient httpclient)
+        public static async Task<(string, AppDetailsResponse)> GetAppDetails(string appId, HttpClient httpclient)
         {
             //https://wiki.teamfortress.com/wiki/User:RJackson/StorefrontAPI
-            var httpResponse = await httpclient.GetAsync($"appdetails/?appids={appId}");
+            var httpResponse = await httpclient.GetAsync($"appdetails/?appids={appId}&l=english");
 
             if (httpResponse.IsSuccessStatusCode)
             {
                 var response = await JsonSerializer.DeserializeAsync<Dictionary<string, AppDetailsResponse>>(await httpResponse.Content.ReadAsStreamAsync());
 
-                return response.Values.First();
+                if (response.Values.Count == 0 || response.Values.First().Success == false)
+                {
+                    return (appId, null);
+                }
+                else
+                {
+                    return (appId, response.Values.First());
+                }
             }
             else
             {
-                return null;
+                return (appId, null);
             }
         }
     }
